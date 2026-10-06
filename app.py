@@ -1,7 +1,7 @@
 """
 AI-Powered E-Commerce Sales & Business Analytics
 Streamlit Dashboard — IBM SkillsBuild Internship 2026
-Author: Tejaswini Lende
+Author: Sejal Dange 
 """
 
 import streamlit as st
