@@ -1,7 +1,7 @@
 # AI-Powered E-Commerce Sales & Business Analytics
 
 **IBM SkillsBuild Data Analytics with AI Internship 2026**
-**Author:** Tejaswini Lende
+**Author:** Sejal Dange 
 
 ---
 
@@ -34,9 +34,9 @@ This project performs end-to-end data analytics on a real-world Amazon India sal
 
 | File | Description |
 |---|---|
-| `TejaswiniLende_AIPoweredECommerceSalesAnalytics.ipynb` | Main Jupyter Notebook — all analysis, SQL, and visualisations |
+| `SejalDange_AIPoweredECommerceSalesAnalytics.ipynb` | Main Jupyter Notebook — all analysis, SQL, and visualisations |
 | `app.py` | Streamlit interactive dashboard |
-| `TejaswiniLende_ProjectReport.docx` | Professional project report with findings and tables |
+| `SejalDange_ProjectReport.docx` | Professional project report with findings and tables |
 | `requirements.txt` | Python dependencies |
 | `README.md` | This file |
 | `Amazon Sale Report.csv` | Dataset (download separately from Kaggle) |
@@ -98,7 +98,7 @@ Download `Amazon Sale Report.csv` from Kaggle and place it in the project folder
 ### Run the Jupyter Notebook
 
 ```bash
-jupyter notebook TejaswiniLende_AIPoweredECommerceSalesAnalytics.ipynb
+jupyter notebook SejalDange_AIPoweredECommerceSalesAnalytics.ipynb
 ```
 
 Run all cells from top to bottom. Charts will be displayed inline and saved as PNG files in the project directory.
@@ -185,9 +185,9 @@ The dashboard will open automatically in your browser at `http://localhost:8501`
 project-folder/
 │
 ├── Amazon Sale Report.csv                          ← dataset (download from Kaggle)
-├── TejaswiniLende_AIPoweredECommerceSalesAnalytics.ipynb
+├── SejalDange_AIPoweredECommerceSalesAnalytics.ipynb
 ├── app.py
-├── TejaswiniLende_ProjectReport.docx
+├── SejalDange_ProjectReport.docx
 ├── requirements.txt
 ├── README.md
 │
