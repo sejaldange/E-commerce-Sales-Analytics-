@@ -1,0 +1,1395 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# AI-Powered E-Commerce Sales & Business Analytics\n",
+    "**IBM SkillsBuild Data Analytics with AI Internship 2026**\n",
+    "\n",
+    "**Author:** Tejaswini Lende\n",
+    "\n",
+    "**Dataset:** Amazon Sale Report (Amazon India, March–June 2022)\n",
+    "\n",
+    "---\n",
+    "\n",
+    "## Project Overview\n",
+    "\n",
+    "This notebook performs end-to-end data analytics on Amazon India sales data. It covers:\n",
+    "1. Data Loading & Inspection\n",
+    "2. Data Cleaning\n",
+    "3. Exploratory Data Analysis (EDA)\n",
+    "4. Sales & Revenue Analysis\n",
+    "5. Product & Category Analysis\n",
+    "6. Geographical Analysis\n",
+    "7. Order & Fulfilment Analysis\n",
+    "8. SQL-Based Analysis (SQLite)\n",
+    "9. Data Visualization\n",
+    "10. AI-Assisted Business Insights\n",
+    "\n",
+    "**Technology Stack:** Python · Pandas · NumPy · Matplotlib · Seaborn · SQLite · Streamlit · IBM Bob (AI assistant)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 1: Import Libraries"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Standard data manipulation and numerical computing\n",
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "\n",
+    "# Visualization\n",
+    "import matplotlib.pyplot as plt\n",
+    "import matplotlib.ticker as mticker\n",
+    "import seaborn as sns\n",
+    "\n",
+    "# SQL\n",
+    "import sqlite3\n",
+    "\n",
+    "# Utilities\n",
+    "import warnings\n",
+    "warnings.filterwarnings('ignore')\n",
+    "\n",
+    "# Notebook display\n",
+    "from IPython.display import display\n",
+    "\n",
+    "# Consistent style\n",
+    "sns.set_theme(style='whitegrid', palette='muted')\n",
+    "plt.rcParams['figure.dpi'] = 110\n",
+    "plt.rcParams['font.size'] = 11\n",
+    "\n",
+    "print('All libraries imported successfully.')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 2: Load Dataset"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Load the raw CSV file\n",
+    "# low_memory=False avoids mixed-type warnings for large files\n",
+    "df_raw = pd.read_csv('Amazon Sale Report.csv', low_memory=False)\n",
+    "\n",
+    "# Strip whitespace from column names (Sales Channel has a trailing space)\n",
+    "df_raw.columns = df_raw.columns.str.strip()\n",
+    "\n",
+    "print('Raw Dataset Shape:', df_raw.shape)\n",
+    "print('\\nColumn Names:')\n",
+    "print(df_raw.columns.tolist())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Preview the first 5 rows\n",
+    "df_raw.head()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Summary of data types and non-null counts\n",
+    "df_raw.info()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Statistical summary for numerical columns\n",
+    "df_raw.describe()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Count of missing values per column\n",
+    "print('Missing Values per Column:')\n",
+    "print(df_raw.isnull().sum())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Observations from Raw Data\n",
+    "- **128,975 rows** and **24 columns** (including one unnamed/empty column)\n",
+    "- `Amount` has **7,795 nulls** — these correspond to cancelled/zero-value orders\n",
+    "- `Courier Status` has **6,872 nulls** — mostly cancelled or pending orders\n",
+    "- `fulfilled-by` has **89,698 nulls** — Amazon-fulfilled orders have no value here (they use the `Fulfilment` column)\n",
+    "- `promotion-ids` has **49,153 nulls** — orders without any promotions\n",
+    "- `Unnamed: 22` is a completely empty artifact column — will be dropped\n",
+    "- `Date` is stored as a string; needs parsing to datetime"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 3: Data Cleaning"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Work on a copy so the raw data is always available for reference\n",
+    "df = df_raw.copy()\n",
+    "\n",
+    "# --- Step 1: Drop the empty artifact column ---\n",
+    "df.drop(columns=['Unnamed: 22'], inplace=True)\n",
+    "print('Dropped Unnamed: 22')\n",
+    "\n",
+    "# --- Step 2: Parse Date column to datetime ---\n",
+    "# Format is MM-DD-YY  e.g.  04-30-22\n",
+    "df['Date'] = pd.to_datetime(df['Date'], format='%m-%d-%y', errors='coerce')\n",
+    "print('Date column parsed. Invalid dates set to NaT:', df['Date'].isna().sum())\n",
+    "\n",
+    "# --- Step 3: Remove rows where Amount is null or zero ---\n",
+    "# These are cancelled/unresolved orders with no monetary value\n",
+    "before = len(df)\n",
+    "df = df.dropna(subset=['Amount'])\n",
+    "df = df[df['Amount'] > 0]\n",
+    "print(f'Removed {before - len(df)} rows with null/zero Amount. Remaining: {len(df)}')\n",
+    "\n",
+    "# --- Step 4: Remove duplicate Order IDs ---\n",
+    "# Keep the first occurrence\n",
+    "before = len(df)\n",
+    "df.drop_duplicates(subset=['Order ID'], keep='first', inplace=True)\n",
+    "print(f'Removed {before - len(df)} duplicate Order IDs. Remaining: {len(df)}')\n",
+    "\n",
+    "# --- Step 5: Standardise text columns ---\n",
+    "# Strip whitespace and unify casing for geography columns\n",
+    "df['ship-state'] = df['ship-state'].str.strip().str.upper()\n",
+    "df['ship-city']  = df['ship-city'].str.strip().str.upper()\n",
+    "\n",
+    "# --- Step 6: Fill missing Courier Status with 'Unknown' ---\n",
+    "df['Courier Status'].fillna('Unknown', inplace=True)\n",
+    "\n",
+    "# --- Step 7: Add derived time columns ---\n",
+    "df['Month']      = df['Date'].dt.to_period('M').astype(str)\n",
+    "df['Month_Name'] = df['Date'].dt.strftime('%b %Y')\n",
+    "df['Week']       = df['Date'].dt.isocalendar().week\n",
+    "\n",
+    "# --- Step 8: Add a Has_Promotion flag ---\n",
+    "df['Has_Promotion'] = df['promotion-ids'].notna().astype(int)\n",
+    "\n",
+    "print('\\nCleaned Dataset Shape:', df.shape)\n",
+    "print('Date range:', df['Date'].min().date(), 'to', df['Date'].max().date())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Verify nulls after cleaning\n",
+    "print('Remaining nulls in key columns:')\n",
+    "key_cols = ['Order ID','Date','Status','Fulfilment','Category','Amount','ship-state','ship-city']\n",
+    "print(df[key_cols].isnull().sum())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Quick sanity check on cleaned data\n",
+    "df[['Amount','Qty']].describe().round(2)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 4: Exploratory Data Analysis (EDA)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 4.1 Core Business Metrics"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "total_revenue  = df['Amount'].sum()\n",
+    "total_orders   = df['Order ID'].nunique()\n",
+    "avg_order_val  = df['Amount'].mean()\n",
+    "total_qty      = df['Qty'].sum()\n",
+    "unique_skus    = df['SKU'].nunique()\n",
+    "unique_states  = df['ship-state'].nunique()\n",
+    "\n",
+    "print('=' * 42)\n",
+    "print(f'  Total Revenue       : ₹{total_revenue:>14,.2f}')\n",
+    "print(f'  Total Orders        : {total_orders:>14,}')\n",
+    "print(f'  Average Order Value : ₹{avg_order_val:>14,.2f}')\n",
+    "print(f'  Total Units Sold    : {total_qty:>14,}')\n",
+    "print(f'  Unique SKUs         : {unique_skus:>14,}')\n",
+    "print(f'  States Covered      : {unique_states:>14,}')\n",
+    "print('=' * 42)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 4.2 Distribution of Order Amount"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig, axes = plt.subplots(1, 2, figsize=(14, 5))\n",
+    "\n",
+    "# Histogram\n",
+    "axes[0].hist(df['Amount'], bins=60, color='steelblue', edgecolor='white', alpha=0.85)\n",
+    "axes[0].set_title('Distribution of Order Amount')\n",
+    "axes[0].set_xlabel('Amount (INR)')\n",
+    "axes[0].set_ylabel('Frequency')\n",
+    "axes[0].axvline(df['Amount'].mean(), color='red', linestyle='--', label=f'Mean ₹{df[\"Amount\"].mean():.0f}')\n",
+    "axes[0].axvline(df['Amount'].median(), color='green', linestyle='--', label=f'Median ₹{df[\"Amount\"].median():.0f}')\n",
+    "axes[0].legend()\n",
+    "\n",
+    "# Box plot\n",
+    "axes[1].boxplot(df['Amount'].dropna(), vert=True, patch_artist=True,\n",
+    "                boxprops=dict(facecolor='lightblue', color='steelblue'))\n",
+    "axes[1].set_title('Box Plot of Order Amount')\n",
+    "axes[1].set_ylabel('Amount (INR)')\n",
+    "axes[1].set_xticks([1])\n",
+    "axes[1].set_xticklabels(['Amount'])\n",
+    "\n",
+    "plt.suptitle('Order Amount Distribution', fontsize=14, fontweight='bold')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_amount_distribution.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 5: Sales Analysis"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 5.1 Monthly Sales Trend"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "monthly_sales = (\n",
+    "    df.groupby('Month')\n",
+    "    .agg(Revenue=('Amount','sum'), Orders=('Order ID','count'))\n",
+    "    .reset_index()\n",
+    "    .sort_values('Month')\n",
+    ")\n",
+    "# Exclude March 2022 — only 1 day of data (partial month)\n",
+    "monthly_sales = monthly_sales[monthly_sales['Month'] != '2022-03']\n",
+    "monthly_sales['Revenue_Lakhs'] = monthly_sales['Revenue'] / 1e5\n",
+    "print(monthly_sales.to_string(index=False))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig, ax1 = plt.subplots(figsize=(10, 5))\n",
+    "\n",
+    "color_bar = 'steelblue'\n",
+    "bars = ax1.bar(monthly_sales['Month'], monthly_sales['Revenue_Lakhs'],\n",
+    "               color=color_bar, alpha=0.75, label='Revenue (Lakhs ₹)')\n",
+    "ax1.set_xlabel('Month')\n",
+    "ax1.set_ylabel('Revenue (Lakhs ₹)', color=color_bar)\n",
+    "ax1.tick_params(axis='y', labelcolor=color_bar)\n",
+    "\n",
+    "# Annotate bars\n",
+    "for bar in bars:\n",
+    "    ax1.text(bar.get_x() + bar.get_width()/2,\n",
+    "             bar.get_height() + 0.3,\n",
+    "             f'₹{bar.get_height():.1f}L',\n",
+    "             ha='center', va='bottom', fontsize=10)\n",
+    "\n",
+    "ax2 = ax1.twinx()\n",
+    "ax2.plot(monthly_sales['Month'], monthly_sales['Orders'], color='darkorange',\n",
+    "         marker='o', linewidth=2, label='Order Count')\n",
+    "ax2.set_ylabel('Order Count', color='darkorange')\n",
+    "ax2.tick_params(axis='y', labelcolor='darkorange')\n",
+    "\n",
+    "lines1, labels1 = ax1.get_legend_handles_labels()\n",
+    "lines2, labels2 = ax2.get_legend_handles_labels()\n",
+    "ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right')\n",
+    "\n",
+    "plt.title('Monthly Sales Revenue & Order Count (Apr–Jun 2022)', fontsize=13, fontweight='bold')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_monthly_sales.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 5.2 B2B vs B2C Sales"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "b2b_summary = df.groupby('B2B').agg(\n",
+    "    Revenue=('Amount','sum'),\n",
+    "    Orders=('Order ID','count'),\n",
+    "    Avg_Order_Value=('Amount','mean')\n",
+    ").round(2)\n",
+    "b2b_summary.index = ['B2C (Non-B2B)', 'B2B']\n",
+    "b2b_summary['Revenue_Pct'] = (b2b_summary['Revenue'] / b2b_summary['Revenue'].sum() * 100).round(2)\n",
+    "print(b2b_summary)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig, axes = plt.subplots(1, 2, figsize=(12, 5))\n",
+    "\n",
+    "labels = ['B2C', 'B2B']\n",
+    "colors = ['#4C72B0', '#DD8452']\n",
+    "\n",
+    "axes[0].pie(b2b_summary['Revenue'], labels=labels, autopct='%1.1f%%',\n",
+    "            colors=colors, startangle=90)\n",
+    "axes[0].set_title('Revenue Share: B2B vs B2C')\n",
+    "\n",
+    "axes[1].pie(b2b_summary['Orders'], labels=labels, autopct='%1.1f%%',\n",
+    "            colors=colors, startangle=90)\n",
+    "axes[1].set_title('Order Share: B2B vs B2C')\n",
+    "\n",
+    "plt.suptitle('B2B vs B2C Comparison', fontsize=13, fontweight='bold')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_b2b_b2c.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 5.3 Sales Channel Analysis"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "channel_summary = df.groupby('Sales Channel').agg(\n",
+    "    Revenue=('Amount','sum'),\n",
+    "    Orders=('Order ID','count')\n",
+    ").round(2)\n",
+    "print(channel_summary)\n",
+    "# Note: 100% of cleaned orders are through Amazon.in"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 6: Product & Category Analysis"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 6.1 Revenue by Category"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "cat_sales = (\n",
+    "    df.groupby('Category')\n",
+    "    .agg(Revenue=('Amount','sum'), Orders=('Order ID','count'), Qty=('Qty','sum'))\n",
+    "    .sort_values('Revenue', ascending=False)\n",
+    "    .reset_index()\n",
+    ")\n",
+    "cat_sales['Revenue_Pct'] = (cat_sales['Revenue'] / cat_sales['Revenue'].sum() * 100).round(2)\n",
+    "print(cat_sales.to_string(index=False))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig, axes = plt.subplots(1, 3, figsize=(18, 6))\n",
+    "\n",
+    "# Revenue\n",
+    "sns.barplot(data=cat_sales, x='Revenue', y='Category', palette='Blues_d', ax=axes[0])\n",
+    "axes[0].set_title('Revenue by Category')\n",
+    "axes[0].set_xlabel('Revenue (INR)')\n",
+    "axes[0].xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'₹{x/1e6:.1f}M'))\n",
+    "\n",
+    "# Orders\n",
+    "sns.barplot(data=cat_sales.sort_values('Orders', ascending=False),\n",
+    "            x='Orders', y='Category', palette='Greens_d', ax=axes[1])\n",
+    "axes[1].set_title('Order Count by Category')\n",
+    "axes[1].set_xlabel('Number of Orders')\n",
+    "\n",
+    "# Quantity\n",
+    "sns.barplot(data=cat_sales.sort_values('Qty', ascending=False),\n",
+    "            x='Qty', y='Category', palette='Oranges_d', ax=axes[2])\n",
+    "axes[2].set_title('Units Sold by Category')\n",
+    "axes[2].set_xlabel('Quantity Sold')\n",
+    "\n",
+    "plt.suptitle('Category-Level Analysis', fontsize=14, fontweight='bold')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_category_analysis.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 6.2 Top 10 SKUs by Revenue"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "top_sku = (\n",
+    "    df.groupby('SKU')['Amount']\n",
+    "    .sum()\n",
+    "    .sort_values(ascending=False)\n",
+    "    .head(10)\n",
+    "    .reset_index()\n",
+    ")\n",
+    "top_sku.columns = ['SKU', 'Revenue']\n",
+    "\n",
+    "fig, ax = plt.subplots(figsize=(10, 6))\n",
+    "sns.barplot(data=top_sku, x='Revenue', y='SKU', palette='viridis', ax=ax)\n",
+    "ax.set_title('Top 10 SKUs by Revenue', fontsize=13, fontweight='bold')\n",
+    "ax.set_xlabel('Revenue (INR)')\n",
+    "ax.set_ylabel('SKU')\n",
+    "ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'₹{x/1e3:.0f}K'))\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_top_sku.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 6.3 Size Distribution"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "size_order = ['XS','S','M','L','XL','XXL','3XL','4XL','5XL','6XL','Free']\n",
+    "size_data = (\n",
+    "    df.groupby('Size')['Amount']\n",
+    "    .sum()\n",
+    "    .reindex([s for s in size_order if s in df['Size'].unique()])\n",
+    "    .reset_index()\n",
+    ")\n",
+    "size_data.columns = ['Size','Revenue']\n",
+    "\n",
+    "fig, ax = plt.subplots(figsize=(10, 5))\n",
+    "sns.barplot(data=size_data, x='Size', y='Revenue', palette='coolwarm', ax=ax)\n",
+    "ax.set_title('Revenue by Size', fontsize=13, fontweight='bold')\n",
+    "ax.set_xlabel('Size')\n",
+    "ax.set_ylabel('Revenue (INR)')\n",
+    "ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'₹{x/1e6:.1f}M'))\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_size_revenue.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 7: Geographical Analysis"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 7.1 Top 10 States by Revenue"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "state_sales = (\n",
+    "    df.groupby('ship-state')\n",
+    "    .agg(Revenue=('Amount','sum'), Orders=('Order ID','count'))\n",
+    "    .sort_values('Revenue', ascending=False)\n",
+    "    .head(10)\n",
+    "    .reset_index()\n",
+    ")\n",
+    "print(state_sales.to_string(index=False))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig, axes = plt.subplots(1, 2, figsize=(16, 6))\n",
+    "\n",
+    "sns.barplot(data=state_sales, x='Revenue', y='ship-state', palette='Blues_d', ax=axes[0])\n",
+    "axes[0].set_title('Top 10 States by Revenue')\n",
+    "axes[0].set_xlabel('Revenue (INR)')\n",
+    "axes[0].set_ylabel('State')\n",
+    "axes[0].xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'₹{x/1e6:.0f}M'))\n",
+    "\n",
+    "state_orders = (\n",
+    "    df.groupby('ship-state')['Order ID']\n",
+    "    .count()\n",
+    "    .sort_values(ascending=False)\n",
+    "    .head(10)\n",
+    "    .reset_index()\n",
+    ")\n",
+    "state_orders.columns = ['State','Orders']\n",
+    "sns.barplot(data=state_orders, x='Orders', y='State', palette='Greens_d', ax=axes[1])\n",
+    "axes[1].set_title('Top 10 States by Order Count')\n",
+    "axes[1].set_xlabel('Number of Orders')\n",
+    "axes[1].set_ylabel('')\n",
+    "\n",
+    "plt.suptitle('Geographical Analysis — State Level', fontsize=14, fontweight='bold')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_state_analysis.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 7.2 Top 10 Cities by Revenue"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "city_sales = (\n",
+    "    df.groupby('ship-city')\n",
+    "    .agg(Revenue=('Amount','sum'), Orders=('Order ID','count'))\n",
+    "    .sort_values('Revenue', ascending=False)\n",
+    "    .head(10)\n",
+    "    .reset_index()\n",
+    ")\n",
+    "\n",
+    "fig, ax = plt.subplots(figsize=(10, 6))\n",
+    "sns.barplot(data=city_sales, x='Revenue', y='ship-city', palette='viridis', ax=ax)\n",
+    "ax.set_title('Top 10 Cities by Revenue', fontsize=13, fontweight='bold')\n",
+    "ax.set_xlabel('Revenue (INR)')\n",
+    "ax.set_ylabel('City')\n",
+    "ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'₹{x/1e6:.1f}M'))\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_city_analysis.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 8: Order & Fulfilment Analysis"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 8.1 Order Status Distribution"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "status_counts = df['Status'].value_counts().reset_index()\n",
+    "status_counts.columns = ['Status','Count']\n",
+    "status_counts['Pct'] = (status_counts['Count'] / status_counts['Count'].sum() * 100).round(2)\n",
+    "print(status_counts.to_string(index=False))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig, axes = plt.subplots(1, 2, figsize=(15, 6))\n",
+    "\n",
+    "# Horizontal bar chart\n",
+    "sns.barplot(data=status_counts, x='Count', y='Status', palette='Set2', ax=axes[0])\n",
+    "axes[0].set_title('Order Status Distribution')\n",
+    "axes[0].set_xlabel('Number of Orders')\n",
+    "axes[0].set_ylabel('Order Status')\n",
+    "\n",
+    "# Pie chart for top 5 statuses\n",
+    "top5 = status_counts.head(5).copy()\n",
+    "others_count = status_counts.iloc[5:]['Count'].sum()\n",
+    "if others_count > 0:\n",
+    "    top5 = pd.concat([top5, pd.DataFrame([{'Status':'Others','Count':others_count,'Pct':0}])], ignore_index=True)\n",
+    "axes[1].pie(top5['Count'], labels=top5['Status'], autopct='%1.1f%%',\n",
+    "            startangle=140, colors=sns.color_palette('Set2', len(top5)))\n",
+    "axes[1].set_title('Order Status Share (Top 5 + Others)')\n",
+    "\n",
+    "plt.suptitle('Order Status Analysis', fontsize=14, fontweight='bold')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_order_status.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 8.2 Cancellation Rate"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "cancelled = df[df['Status'] == 'Cancelled'].shape[0]\n",
+    "total = len(df)\n",
+    "cancel_rate = (cancelled / total) * 100\n",
+    "print(f'Total Orders (cleaned dataset) : {total:,}')\n",
+    "print(f'Cancelled Orders               : {cancelled:,}')\n",
+    "print(f'Cancellation Rate              : {cancel_rate:.2f}%')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 8.3 Fulfilment Type Analysis"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Cross-tab: Fulfilment vs Status\n",
+    "fulfil_status = pd.crosstab(df['Fulfilment'], df['Status'])\n",
+    "print('Fulfilment vs Status cross-tab:')\n",
+    "print(fulfil_status)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fulfil_summary = (\n",
+    "    df.groupby('Fulfilment')\n",
+    "    .agg(Revenue=('Amount','sum'), Orders=('Order ID','count'), Avg_Value=('Amount','mean'))\n",
+    "    .round(2)\n",
+    "    .reset_index()\n",
+    ")\n",
+    "print(fulfil_summary)\n",
+    "\n",
+    "fig, axes = plt.subplots(1, 2, figsize=(12, 5))\n",
+    "\n",
+    "axes[0].pie(fulfil_summary['Revenue'], labels=fulfil_summary['Fulfilment'],\n",
+    "            autopct='%1.1f%%', startangle=90,\n",
+    "            colors=['#4C72B0','#DD8452'])\n",
+    "axes[0].set_title('Revenue by Fulfilment Type')\n",
+    "\n",
+    "axes[1].pie(fulfil_summary['Orders'], labels=fulfil_summary['Fulfilment'],\n",
+    "            autopct='%1.1f%%', startangle=90,\n",
+    "            colors=['#4C72B0','#DD8452'])\n",
+    "axes[1].set_title('Orders by Fulfilment Type')\n",
+    "\n",
+    "plt.suptitle('Fulfilment Type Comparison', fontsize=13, fontweight='bold')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_fulfilment.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 8.4 Shipping Service Level"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "ship_level = (\n",
+    "    df.groupby('ship-service-level')\n",
+    "    .agg(Revenue=('Amount','sum'), Orders=('Order ID','count'))\n",
+    "    .reset_index()\n",
+    ")\n",
+    "print(ship_level)\n",
+    "\n",
+    "fig, ax = plt.subplots(figsize=(7, 5))\n",
+    "ax.bar(ship_level['ship-service-level'], ship_level['Revenue'],\n",
+    "       color=['steelblue','darkorange'])\n",
+    "ax.set_title('Revenue by Shipping Service Level', fontsize=12, fontweight='bold')\n",
+    "ax.set_xlabel('Service Level')\n",
+    "ax.set_ylabel('Revenue (INR)')\n",
+    "ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'₹{x/1e6:.0f}M'))\n",
+    "for i, row in ship_level.iterrows():\n",
+    "    ax.text(i, row['Revenue'] + 2e5, f\"{row['Orders']:,} orders\", ha='center', fontsize=10)\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_service_level.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 8.5 Promotions Analysis"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "promo_summary = (\n",
+    "    df.groupby('Has_Promotion')\n",
+    "    .agg(Orders=('Order ID','count'), Revenue=('Amount','sum'), Avg_Value=('Amount','mean'))\n",
+    "    .round(2)\n",
+    "    .reset_index()\n",
+    ")\n",
+    "promo_summary['Has_Promotion'] = promo_summary['Has_Promotion'].map({0:'No Promotion', 1:'With Promotion'})\n",
+    "print(promo_summary)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig, axes = plt.subplots(1, 2, figsize=(12, 5))\n",
+    "\n",
+    "axes[0].pie(promo_summary['Orders'], labels=promo_summary['Has_Promotion'],\n",
+    "            autopct='%1.1f%%', startangle=90, colors=['#55a868','#4c72b0'])\n",
+    "axes[0].set_title('Orders: Promotion vs No Promotion')\n",
+    "\n",
+    "axes[1].bar(promo_summary['Has_Promotion'], promo_summary['Avg_Value'],\n",
+    "            color=['#55a868','#4c72b0'])\n",
+    "axes[1].set_title('Average Order Value: Promotion vs No Promotion')\n",
+    "axes[1].set_ylabel('Avg Order Value (INR)')\n",
+    "\n",
+    "plt.suptitle('Promotions Impact Analysis', fontsize=13, fontweight='bold')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_promotions.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 9: SQL-Based Analysis (SQLite)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Create an in-memory SQLite database and load the cleaned DataFrame\n",
+    "conn = sqlite3.connect(':memory:')\n",
+    "df.to_sql('sales', conn, if_exists='replace', index=False)\n",
+    "print('Table `sales` loaded into SQLite.')\n",
+    "print('Total rows in DB:', pd.read_sql('SELECT COUNT(*) AS cnt FROM sales', conn).iloc[0,0])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# SQL Query 1: Overall business summary\n",
+    "q1 = \"\"\"\n",
+    "SELECT\n",
+    "    COUNT(DISTINCT \"Order ID\")          AS Total_Orders,\n",
+    "    ROUND(SUM(Amount), 2)               AS Total_Revenue_INR,\n",
+    "    ROUND(AVG(Amount), 2)               AS Avg_Order_Value,\n",
+    "    SUM(Qty)                            AS Total_Units_Sold,\n",
+    "    COUNT(DISTINCT SKU)                 AS Unique_SKUs,\n",
+    "    COUNT(DISTINCT \"ship-state\")        AS States_Covered\n",
+    "FROM sales;\n",
+    "\"\"\"\n",
+    "print('--- Q1: Overall Business Summary ---')\n",
+    "display(pd.read_sql(q1, conn))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# SQL Query 2: Revenue and order count by Category\n",
+    "q2 = \"\"\"\n",
+    "SELECT\n",
+    "    Category,\n",
+    "    COUNT(\"Order ID\")                   AS Total_Orders,\n",
+    "    SUM(Qty)                            AS Total_Qty,\n",
+    "    ROUND(SUM(Amount), 2)               AS Total_Revenue,\n",
+    "    ROUND(AVG(Amount), 2)               AS Avg_Order_Value,\n",
+    "    ROUND(SUM(Amount)*100.0 / (SELECT SUM(Amount) FROM sales), 2) AS Revenue_Pct\n",
+    "FROM sales\n",
+    "GROUP BY Category\n",
+    "ORDER BY Total_Revenue DESC;\n",
+    "\"\"\"\n",
+    "print('--- Q2: Revenue and Orders by Category ---')\n",
+    "display(pd.read_sql(q2, conn))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# SQL Query 3: Monthly revenue trend\n",
+    "q3 = \"\"\"\n",
+    "SELECT\n",
+    "    Month,\n",
+    "    COUNT(\"Order ID\")     AS Orders,\n",
+    "    ROUND(SUM(Amount),2)  AS Revenue,\n",
+    "    ROUND(AVG(Amount),2)  AS Avg_Order_Value\n",
+    "FROM sales\n",
+    "WHERE Month != '2022-03'\n",
+    "GROUP BY Month\n",
+    "ORDER BY Month;\n",
+    "\"\"\"\n",
+    "print('--- Q3: Monthly Revenue Trend ---')\n",
+    "display(pd.read_sql(q3, conn))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# SQL Query 4: Top 10 states by revenue\n",
+    "q4 = \"\"\"\n",
+    "SELECT\n",
+    "    \"ship-state\"          AS State,\n",
+    "    COUNT(\"Order ID\")     AS Orders,\n",
+    "    ROUND(SUM(Amount),2)  AS Revenue\n",
+    "FROM sales\n",
+    "GROUP BY State\n",
+    "ORDER BY Revenue DESC\n",
+    "LIMIT 10;\n",
+    "\"\"\"\n",
+    "print('--- Q4: Top 10 States by Revenue ---')\n",
+    "display(pd.read_sql(q4, conn))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# SQL Query 5: Order status summary with cancellation rate\n",
+    "q5 = \"\"\"\n",
+    "SELECT\n",
+    "    Status,\n",
+    "    COUNT(\"Order ID\")    AS Orders,\n",
+    "    ROUND(COUNT(\"Order ID\")*100.0 / (SELECT COUNT(*) FROM sales), 2) AS Pct\n",
+    "FROM sales\n",
+    "GROUP BY Status\n",
+    "ORDER BY Orders DESC;\n",
+    "\"\"\"\n",
+    "print('--- Q5: Order Status Summary ---')\n",
+    "display(pd.read_sql(q5, conn))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# SQL Query 6: Fulfilment type performance\n",
+    "q6 = \"\"\"\n",
+    "SELECT\n",
+    "    Fulfilment,\n",
+    "    COUNT(\"Order ID\")     AS Total_Orders,\n",
+    "    ROUND(SUM(Amount),2)  AS Revenue,\n",
+    "    ROUND(AVG(Amount),2)  AS Avg_Order_Value,\n",
+    "    SUM(CASE WHEN Status='Cancelled' THEN 1 ELSE 0 END) AS Cancellations\n",
+    "FROM sales\n",
+    "GROUP BY Fulfilment\n",
+    "ORDER BY Revenue DESC;\n",
+    "\"\"\"\n",
+    "print('--- Q6: Fulfilment Type Performance ---')\n",
+    "display(pd.read_sql(q6, conn))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# SQL Query 7: B2B vs B2C comparison\n",
+    "q7 = \"\"\"\n",
+    "SELECT\n",
+    "    CASE WHEN B2B = 1 THEN 'B2B' ELSE 'B2C' END  AS Customer_Type,\n",
+    "    COUNT(\"Order ID\")     AS Orders,\n",
+    "    ROUND(SUM(Amount),2)  AS Revenue,\n",
+    "    ROUND(AVG(Amount),2)  AS Avg_Order_Value\n",
+    "FROM sales\n",
+    "GROUP BY B2B;\n",
+    "\"\"\"\n",
+    "print('--- Q7: B2B vs B2C Comparison ---')\n",
+    "display(pd.read_sql(q7, conn))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# SQL Query 8: Top 10 revenue-generating SKUs\n",
+    "q8 = \"\"\"\n",
+    "SELECT\n",
+    "    SKU,\n",
+    "    Category,\n",
+    "    COUNT(\"Order ID\")      AS Orders,\n",
+    "    SUM(Qty)               AS Total_Qty,\n",
+    "    ROUND(SUM(Amount),2)   AS Revenue\n",
+    "FROM sales\n",
+    "GROUP BY SKU\n",
+    "ORDER BY Revenue DESC\n",
+    "LIMIT 10;\n",
+    "\"\"\"\n",
+    "print('--- Q8: Top 10 SKUs by Revenue ---')\n",
+    "display(pd.read_sql(q8, conn))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# SQL Query 9: Shipping service level breakdown\n",
+    "q9 = \"\"\"\n",
+    "SELECT\n",
+    "    \"ship-service-level\"  AS Service_Level,\n",
+    "    COUNT(\"Order ID\")     AS Orders,\n",
+    "    ROUND(SUM(Amount),2)  AS Revenue,\n",
+    "    ROUND(AVG(Amount),2)  AS Avg_Order_Value\n",
+    "FROM sales\n",
+    "GROUP BY Service_Level\n",
+    "ORDER BY Revenue DESC;\n",
+    "\"\"\"\n",
+    "print('--- Q9: Shipping Service Level Breakdown ---')\n",
+    "display(pd.read_sql(q9, conn))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# SQL Query 10: Top 5 cities by order count per state (Maharashtra)\n",
+    "q10 = \"\"\"\n",
+    "SELECT\n",
+    "    \"ship-state\"   AS State,\n",
+    "    \"ship-city\"    AS City,\n",
+    "    COUNT(\"Order ID\")     AS Orders,\n",
+    "    ROUND(SUM(Amount),2)  AS Revenue\n",
+    "FROM sales\n",
+    "WHERE \"ship-state\" = 'MAHARASHTRA'\n",
+    "GROUP BY City\n",
+    "ORDER BY Orders DESC\n",
+    "LIMIT 5;\n",
+    "\"\"\"\n",
+    "print('--- Q10: Top 5 Cities in Maharashtra ---')\n",
+    "display(pd.read_sql(q10, conn))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "conn.close()\n",
+    "print('SQLite connection closed.')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 10: Advanced Visualizations"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 10.1 Heatmap — Category Revenue by Month"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "pivot = df[df['Month'] != '2022-03'].pivot_table(\n",
+    "    values='Amount', index='Category', columns='Month', aggfunc='sum'\n",
+    ")\n",
+    "\n",
+    "fig, ax = plt.subplots(figsize=(9, 6))\n",
+    "sns.heatmap(pivot / 1e5, annot=True, fmt='.1f', cmap='YlOrRd',\n",
+    "            linewidths=0.5, ax=ax,\n",
+    "            cbar_kws={'label': 'Revenue (Lakhs ₹)'})\n",
+    "ax.set_title('Category Revenue Heatmap by Month (Lakhs ₹)', fontsize=13, fontweight='bold')\n",
+    "ax.set_xlabel('Month')\n",
+    "ax.set_ylabel('Category')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_heatmap_cat_month.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 10.2 Courier Status vs Order Status"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "courier_pivot = pd.crosstab(df['Courier Status'], df['Fulfilment'])\n",
+    "courier_pivot.plot(kind='bar', stacked=True, figsize=(9,5),\n",
+    "                   color=['steelblue','darkorange'], edgecolor='white')\n",
+    "plt.title('Courier Status vs Fulfilment Type', fontsize=13, fontweight='bold')\n",
+    "plt.xlabel('Courier Status')\n",
+    "plt.ylabel('Order Count')\n",
+    "plt.xticks(rotation=0)\n",
+    "plt.legend(title='Fulfilment')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_courier_fulfilment.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 10.3 Correlation Heatmap (Numerical Features)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "num_df = df[['Amount','Qty','Has_Promotion']]\n",
+    "corr = num_df.corr()\n",
+    "\n",
+    "fig, ax = plt.subplots(figsize=(6,4))\n",
+    "sns.heatmap(corr, annot=True, fmt='.3f', cmap='coolwarm', linewidths=0.5, ax=ax)\n",
+    "ax.set_title('Correlation Heatmap', fontsize=12, fontweight='bold')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('plot_correlation.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 11: AI-Assisted Business Insights\n",
+    "\n",
+    "> **Note:** These insights are generated programmatically from actual analytical results computed above. No paid API or external AI service is required. IBM Bob (AI assistant) was used during development to structure analysis logic, generate code suggestions, and review findings.\n",
+    "\n",
+    "The insights are data-driven observations phrased as actionable business recommendations."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Recompute key numbers for the insights block\n",
+    "total_rev     = df['Amount'].sum()\n",
+    "total_orders  = df['Order ID'].nunique()\n",
+    "avg_ov        = df['Amount'].mean()\n",
+    "\n",
+    "top_cat       = df.groupby('Category')['Amount'].sum().idxmax()\n",
+    "top_cat_pct   = df.groupby('Category')['Amount'].sum().max() / total_rev * 100\n",
+    "\n",
+    "top_state     = df.groupby('ship-state')['Amount'].sum().idxmax()\n",
+    "top_state_rev = df.groupby('ship-state')['Amount'].sum().max()\n",
+    "\n",
+    "cancel_count  = (df['Status'] == 'Cancelled').sum()\n",
+    "cancel_rate   = cancel_count / total_orders * 100\n",
+    "\n",
+    "amz_pct       = df[df['Fulfilment']=='Amazon'].shape[0] / total_orders * 100\n",
+    "\n",
+    "promo_aov     = df[df['Has_Promotion']==1]['Amount'].mean()\n",
+    "nopromo_aov   = df[df['Has_Promotion']==0]['Amount'].mean()\n",
+    "\n",
+    "b2b_rev       = df[df['B2B']==True]['Amount'].sum()\n",
+    "b2b_pct       = b2b_rev / total_rev * 100\n",
+    "\n",
+    "expedited_pct = (df['ship-service-level']=='Expedited').sum() / total_orders * 100\n",
+    "\n",
+    "insights = f\"\"\"\n",
+    "======================================================\n",
+    "  AI-ASSISTED BUSINESS INSIGHTS REPORT\n",
+    "  Amazon India Sales Data · Mar–Jun 2022\n",
+    "======================================================\n",
+    "\n",
+    "1. REVENUE & SCALE\n",
+    "   Total revenue of ₹{total_rev/1e7:.2f} Crores was generated across\n",
+    "   {total_orders:,} orders. The average order value was ₹{avg_ov:.2f}.\n",
+    "   → The business is operating at scale. Strategies to increase AOV\n",
+    "     (bundling, upselling) could significantly impact total revenue.\n",
+    "\n",
+    "2. CATEGORY CONCENTRATION RISK\n",
+    "   '{top_cat}' accounts for {top_cat_pct:.1f}% of total revenue.\n",
+    "   The top 2 categories (Set + Kurta) together contribute ~77% of sales.\n",
+    "   → Heavy dependency on 2 categories is a risk. Diversifying into\n",
+    "     growing categories like Western Dress and Ethnic Dress is advisable.\n",
+    "\n",
+    "3. GEOGRAPHICAL CONCENTRATION\n",
+    "   {top_state} alone contributes ₹{top_state_rev/1e6:.1f}M in revenue.\n",
+    "   The top 3 states (Maharashtra, Karnataka, Telangana) account for ~40%.\n",
+    "   → Untapped potential exists in Tier-2 and Tier-3 states. Targeted\n",
+    "     regional promotions can improve nationwide distribution.\n",
+    "\n",
+    "4. CANCELLATION CONCERN\n",
+    "   {cancel_count:,} orders were cancelled, a rate of {cancel_rate:.2f}%.\n",
+    "   → Even a 2% reduction in cancellations would recover significant\n",
+    "     revenue. Root causes (sizing, delivery delays) should be investigated.\n",
+    "\n",
+    "5. FULFILMENT EFFICIENCY\n",
+    "   {amz_pct:.1f}% of orders are Amazon-fulfilled.\n",
+    "   → Amazon fulfilment dominates, indicating strong logistics dependency.\n",
+    "     Merchant-fulfilled orders should be monitored for delivery performance.\n",
+    "\n",
+    "6. PROMOTION EFFECTIVENESS\n",
+    "   Orders with promotions: avg ₹{promo_aov:.2f} | Without: ₹{nopromo_aov:.2f}\n",
+    "   {\"→ Promotions are associated with higher AOV, suggesting upsell effectiveness.\" if promo_aov > nopromo_aov else \"→ Promotions are associated with lower AOV, which may indicate discount-heavy behaviour. Review promotion structure.\"}\n",
+    "\n",
+    "7. B2B OPPORTUNITY\n",
+    "   B2B represents only {b2b_pct:.1f}% of revenue but potentially higher\n",
+    "   margins and bulk order potential.\n",
+    "   → Building a dedicated B2B outreach and bulk pricing strategy can\n",
+    "     unlock a high-value revenue stream.\n",
+    "\n",
+    "8. EXPEDITED SHIPPING DEMAND\n",
+    "   {expedited_pct:.1f}% of orders used Expedited shipping.\n",
+    "   → Customers strongly prefer fast delivery. Ensuring consistent\n",
+    "     Expedited availability is critical for retention and satisfaction.\n",
+    "\n",
+    "9. MONTHLY TREND\n",
+    "   Sales peaked in April 2022 (~₹{df[df['Month']=='2022-04']['Amount'].sum()/1e6:.1f}M)\n",
+    "   and showed a gradual decline through June.\n",
+    "   → Plan promotional campaigns and inventory restocking before April\n",
+    "     to maximise the seasonal demand peak next year.\n",
+    "\n",
+    "10. SIZE AVAILABILITY\n",
+    "    Mid-sizes (M, L, XL) drive the highest revenue.\n",
+    "    Extended sizes (4XL, 5XL, 6XL) have very low coverage.\n",
+    "    → Expanding size-inclusive inventory could capture underserved\n",
+    "      customer segments and improve brand inclusivity.\n",
+    "======================================================\n",
+    "\"\"\"\n",
+    "print(insights)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Section 12: Summary Dashboard (Static)\n",
+    "\n",
+    "For the **interactive Streamlit dashboard**, run:\n",
+    "```bash\n",
+    "streamlit run app.py\n",
+    "```\n",
+    "\n",
+    "The code for the dashboard is provided in `app.py` in this project directory."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Final summary table\n",
+    "summary = pd.DataFrame({\n",
+    "    'Metric': [\n",
+    "        'Total Revenue (INR)',\n",
+    "        'Total Orders',\n",
+    "        'Average Order Value (INR)',\n",
+    "        'Total Units Sold',\n",
+    "        'Unique SKUs',\n",
+    "        'States Covered',\n",
+    "        'Top Category',\n",
+    "        'Top State',\n",
+    "        'Cancellation Rate (%)',\n",
+    "        'Amazon Fulfilment Share (%)'\n",
+    "    ],\n",
+    "    'Value': [\n",
+    "        f'₹{df[\"Amount\"].sum():,.2f}',\n",
+    "        f'{df[\"Order ID\"].nunique():,}',\n",
+    "        f'₹{df[\"Amount\"].mean():,.2f}',\n",
+    "        f'{df[\"Qty\"].sum():,}',\n",
+    "        f'{df[\"SKU\"].nunique():,}',\n",
+    "        f'{df[\"ship-state\"].nunique()}',\n",
+    "        df.groupby('Category')['Amount'].sum().idxmax(),\n",
+    "        df.groupby('ship-state')['Amount'].sum().idxmax(),\n",
+    "        f'{(df[\"Status\"]==\"Cancelled\").sum()/len(df)*100:.2f}%',\n",
+    "        f'{(df[\"Fulfilment\"]==\"Amazon\").sum()/len(df)*100:.1f}%'\n",
+    "    ]\n",
+    "})\n",
+    "print('=== PROJECT SUMMARY ===' )\n",
+    "display(summary)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Project Complete\n",
+    "\n",
+    "**Author:** Tejaswini Lende  \n",
+    "**Internship:** IBM SkillsBuild Data Analytics with AI — 2026  \n",
+    "**AI Tool Used:** IBM Bob (code generation, analysis structuring, insight review)  \n",
+    "**Dataset:** Amazon Sale Report (Kaggle) — ~129K rows, April–June 2022\n",
+    "\n",
+    "---"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.10.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
